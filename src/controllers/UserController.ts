@@ -1,10 +1,20 @@
 import express from "express";
+import bcrypt from "bcrypt";
+import socket from "socket.io";
+import { validationResult } from "express-validator"
+
 import { UserModel } from "../models";
-import { IUser } from "../models/User";
 import { createJWToken } from "../utils";
 
 class UserController {
-  show(req: express.Request, res: express.Response) {
+
+  io: socket.Server;
+
+  constructor(io: socket.Server) {
+    this.io = io;
+  }
+
+  show = (req: express.Request, res: express.Response) => {
     const id: string = req.params.id;
     UserModel.findById(id, (err, user) => {
       if (err) {
@@ -14,14 +24,33 @@ class UserController {
       }
       res.json(user);
     });
-  }
+  };
 
-  create(req: express.Request, res: express.Response) {
+  getMe = (req: any, res: express.Response) => {
+    const id: string = req.user._id;
+    UserModel.findById(id, (err, user: any) => {
+      if (err || !user) {
+        return res.status(404).json({
+          message: "User not found"
+        });
+      }
+      res.json(user);
+    });
+  };
+
+  create = (req: express.Request, res: express.Response) => {
     const postData = {
       email: req.body.email,
       fullname: req.body.fullname,
       password: req.body.password
     };
+
+    const errors = validationResult(req);
+
+    if (!errors.isEmpty()) {
+      return res.status(422).json({ errors: errors.array() });
+    }
+
     const user = new UserModel(postData);
     user
       .save()
@@ -29,11 +58,14 @@ class UserController {
         res.json(obj);
       })
       .catch(reason => {
-        res.json(reason);
+        res.status(500).json({
+          status: "error",
+          message: reason
+        });
       });
-  }
+  };
 
-  delete(req: express.Request, res: express.Response) {
+  delete = (req: express.Request, res: express.Response) => {
     const id: string = req.params.id;
     UserModel.findOneAndRemove({ _id: id })
       .then(user => {
@@ -48,16 +80,48 @@ class UserController {
           message: `User not found`
         });
       });
-  }
+  };
 
-  login(req: express.Request, res: express.Response) {
+  verify = (req: express.Request, res: express.Response) => {
+    const hash = req.query.hash;
+
+    if (!hash) {
+      return res.status(422).json({ errors: "Invalid hash" });
+    }
+
+    UserModel.findOne({ confirm_hash: hash }, (err, user) => {
+      if (err || !user) {
+        return res.status(404).json({
+          status: "error",
+          message: "Hash not found"
+        });
+      }
+
+      user.confirmed = true;
+      user.save(err => {
+        if (err) {
+          return res.status(404).json({
+            status: "error",
+            message: err
+          });
+        }
+
+        res.json({
+          status: "success",
+          message: "Аккаунт успешно подтвержден!"
+        });
+      });
+    });
+  };
+
+  login = (req: express.Request, res: express.Response) => {
     const postData = {
       email: req.body.login,
       password: req.body.password
     };
 
-    UserModel.findOne({ email: postData.email }, (err, user: IUser) => {
-      if (err) {
+    UserModel.findOne({ email: postData.email }, (err, user: any) => {
+      if (err || !user) {
         return res.status(404).json({
           message: "User not found"
         });
@@ -70,13 +134,13 @@ class UserController {
           token
         });
       } else {
-        res.json({
+        res.status(403).json({
           status: "error",
           message: "Incorrect password or email"
         });
       }
     });
-  }
+  };
 }
 
 export default UserController;
