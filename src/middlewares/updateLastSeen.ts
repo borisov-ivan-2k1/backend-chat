@@ -2,7 +2,7 @@ import express from "express";
 import { UserModel } from "../models";
 
 export default (
-  req: any, //express.Request
+  req: any,
   __: express.Response,
   next: express.NextFunction
 ) => {
@@ -13,8 +13,8 @@ export default (
         last_seen: new Date()
       },
       { new: true },
-      () => {} // без collback-а не работает
+      () => {}
     );
-    next();
   }
+  next();
 };
